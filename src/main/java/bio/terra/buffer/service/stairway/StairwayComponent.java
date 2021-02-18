@@ -8,6 +8,7 @@ import bio.terra.stairway.exception.StairwayException;
 import bio.terra.stairway.exception.StairwayExecutionException;
 import com.google.common.collect.ImmutableList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ public class StairwayComponent {
     SHUTDOWN,
   }
 
-  private Status status = Status.INITIALIZING;
+  public AtomicReference<Status> atomicStairwayStatus = new AtomicReference<>(Status.INITIALIZING);
 
   @Autowired
   public StairwayComponent(
@@ -44,7 +45,6 @@ public class StairwayComponent {
         "Creating Stairway: name: [{}]  cluster name: [{}]",
         stairwayConfiguration.getName(),
         stairwayConfiguration.getClusterName());
-    // TODO(PF-161): Configure the workqueue pubsub subscription and topic for multi-instance.
     // TODO(PF-314): Cleanup old flightlogs.
     Stairway.Builder builder =
         Stairway.newBuilder()
@@ -72,15 +72,15 @@ public class StairwayComponent {
       // (PF-161): Get obsolete Stairway instances from k8s for multi-instance stairway.
       stairway.recoverAndStart(ImmutableList.of(stairwayConfiguration.getName()));
     } catch (StairwayException | InterruptedException e) {
-      status = Status.ERROR;
+      atomicStairwayStatus.compareAndSet(Status.INITIALIZING, Status.ERROR);
       throw new RuntimeException("Error starting Stairway", e);
     }
-    status = Status.OK;
+    atomicStairwayStatus.compareAndSet(Status.INITIALIZING, Status.OK);
   }
 
   /** Stop accepting jobs and shutdown stairway. Returns true if successful. */
   public boolean shutdown() throws InterruptedException {
-    status = Status.SHUTDOWN;
+    atomicStairwayStatus.set(Status.SHUTDOWN);
     logger.info("Request Stairway shutdown");
     boolean shutdownSuccess =
         stairway.quietDown(
@@ -100,6 +100,6 @@ public class StairwayComponent {
   }
 
   public StairwayComponent.Status getStatus() {
-    return status;
+    return atomicStairwayStatus.get();
   }
 }
