@@ -27,6 +27,10 @@ public class GcpProjectIdGenerator {
     }
 
     switch (projectIdSchema.getScheme()) {
+      case TWO_WORDS_NUMBER:
+        // TODO(PF-228): Add support for this generation mode.
+        throw new UnsupportedOperationException();
+
       case RANDOM_CHAR:
       default:
         generatedId += generateRandomId();
